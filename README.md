@@ -230,12 +230,3 @@ Please follow code style guidelines and keep commits focused and descriptive.
 - Voice and multi-language input support
 
 ---
-
-## License & Contact
-
-This repository currently has no license file included. If you want DeepNote to be open source, add a LICENSE (e.g., MIT) to the repo.
-
-For questions or help, open an issue: https://github.com/shivansh00011/DeepNote/issues
-Author: https://github.com/shivansh00011
-
----
