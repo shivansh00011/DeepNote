@@ -277,6 +277,9 @@ This ensures the LLM receives the most topically relevant content, reducing nois
 
 ---
 
+<img width="3039" height="2380" alt="image" src="https://github.com/user-attachments/assets/765cc9a0-dece-481e-b112-35f4c6e93d6d" />
+
+
 ## Contributing
 
 Contributions are welcome!
