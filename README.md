@@ -1,232 +1,291 @@
 # DeepNote
 
-DeepNote is an AI-driven, real-time query resolution system that turns raw web data into concise, context-aware answers. Built with a Flutter front end and a FastAPI backend, DeepNote combines web scraping, semantic search, and Large Language Models (LLMs) to provide up-to-date responses to user queries.
+<div align="center">
+
+**An AI-powered, real-time query resolution system that transforms web data into concise, context-aware answers.**
+
+![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Dart](https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white)
+![Google Gemini](https://img.shields.io/badge/Gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white)
+
+</div>
 
 ---
 
-## Table of Contents
+## What is DeepNote?
 
-- [Key Features](#key-features)  
-- [Architecture Overview](#architecture-overview)  
-- [Tech Stack](#tech-stack)  
-- [Quick Start](#quick-start)  
-  - [Backend (FastAPI)](#backend-fastapi)  
-  - [Frontend (Flutter)](#frontend-flutter)  
-- [Environment Variables](#environment-variables)  
-- [API](#api)  
-- [Project Layout](#project-layout)  
-- [Development & Testing](#development--testing)  
-- [Contributing](#contributing)  
-- [Roadmap](#roadmap)  
-- [License & Contact](#license--contact)
+DeepNote is a Perplexity-style AI research assistant that answers user queries by:
 
----
+1. **Searching the web** in real-time using Tavily's search API
+2. **Scraping & extracting** full page content via `trafilatura`
+3. **Ranking sources** using semantic similarity (sentence-transformers + cosine similarity)
+4. **Generating grounded answers** via Google Gemini 2.0 Flash, streamed token-by-token
 
-## Key Features
-
-- AI-generated, context-aware answers using LLMs  
-- Semantic search over scraped web content for relevance ranking  
-- Real-time web scraping to surface current information  
-- Cross-platform UI built with Flutter (mobile & desktop)  
-- Fast, async backend powered by FastAPI  
-- Extensible modules for connectors, models, and search
+The result is a fast, cited, up-to-date answer — delivered over WebSocket for a real-time streaming UI experience.
 
 ---
 
 ## Architecture Overview
 
-User → Flutter UI → FastAPI (Query router) → [Scraper(s) + Semantic Search + LLMs] → Aggregator → Response
+```
+User Query (Flutter UI)
+        │
+        ▼
+  WebSocket /ws/chat  (FastAPI)
+        │
+        ├──► SearchService   → Tavily API (10 results) → trafilatura (full content)
+        │
+        ├──► SortService     → SentenceTransformer embeddings → cosine similarity ranking
+        │                       (filters results with score > 0.3)
+        │
+        └──► LLMService      → Gemini 2.0 Flash (streamed response)
+                │
+                ▼
+        Flutter UI receives:
+          1. { type: "search_result", data: [...sources] }
+          2. { type: "content", data: "chunk..." } × N (streamed)
+```
 
-- Frontend: collects queries and displays responses, source citations, and metadata.  
-- Backend: orchestrates scraping, embedding/semantic search, LLM calls, caching, and response assembly.  
-- Data flow is asynchronous to minimize latency and allow parallel scraping/search.
+The Flutter frontend renders sources as clickable cards and streams the Markdown answer in real-time using a skeleton loader while data loads.
 
 ---
 
 ## Tech Stack
 
-- Frontend: Flutter (Dart)  
-- Backend: FastAPI (Python, async)  
-- Search: Semantic embeddings + vector store (configurable)  
-- LLMs: Pluggable (open models or API-based providers)  
-- Optional: Redis (cache), PostgreSQL (metadata), Docker (deployment)
+| Layer | Technology |
+|---|---|
+| **Frontend** | Flutter (Dart) — cross-platform (iOS, Android, macOS, Windows, Linux, Web) |
+| **Backend** | FastAPI (Python, async) with WebSocket support |
+| **Web Search** | Tavily Search API |
+| **Content Extraction** | trafilatura |
+| **Semantic Ranking** | sentence-transformers (`all-MiniLM-L6-v2`) + NumPy cosine similarity |
+| **LLM** | Google Gemini 2.0 Flash (via `google-generativeai` SDK) |
+| **Fonts** | Google Fonts (Inter + IBM Plex Mono) |
+| **Markdown Rendering** | flutter_markdown |
+| **Loading States** | skeletonizer |
+| **URL Launching** | url_launcher |
+
+---
+
+## Project Structure
+
+```
+DeepNote/
+├── lib/                          # Flutter frontend
+│   ├── main.dart                 # App entry point, theme configuration
+│   ├── pages/
+│   │   ├── home.dart             # Home screen with search input
+│   │   └── chat_page.dart        # Results page (sources + answer)
+│   ├── widgets/
+│   │   ├── search_section.dart   # Search bar + submit button
+│   │   ├── sources_section.dart  # Source cards with URL links
+│   │   ├── answer_section.dart   # Streamed Markdown answer
+│   │   ├── side_nav.dart         # Collapsible sidebar navigation
+│   │   └── search_button.dart    # Reusable hover-aware button
+│   ├── services/
+│   │   └── chat_service.dart     # Singleton WebSocket client (streams search results & content)
+│   └── theme/
+│       └── colors.dart           # App-wide color constants
+│
+├── server/                       # FastAPI backend
+│   ├── main.py                   # WebSocket endpoint + REST /chat endpoint
+│   ├── config.py                 # Pydantic settings (loads .env)
+│   ├── .env                      # API keys (Tavily + Gemini)
+│   ├── pydantic_model/
+│   │   └── chat_body.py          # Request body schema
+│   └── services/
+│       ├── search_service.py     # Tavily search + trafilatura extraction
+│       ├── sort_service.py       # Semantic similarity ranking
+│       └── llm_service.py        # Gemini streaming response generation
+│
+├── android/                      # Android platform files
+├── ios/                          # iOS platform files
+├── macos/                        # macOS platform files
+├── windows/                      # Windows platform files
+├── linux/                        # Linux platform files
+├── web/                          # Web platform files
+├── pubspec.yaml                  # Flutter dependencies
+└── README.md
+```
+
+---
+
+## Key Features
+
+- **Real-time streaming** — Answers stream token-by-token via WebSocket; no waiting for the full response
+- **Semantic source ranking** — Sources are ranked by cosine similarity to the query using MiniLM embeddings, filtered to relevance score > 0.3
+- **Full content scraping** — Goes beyond search snippets by extracting full article text with trafilatura
+- **Grounded answers** — Gemini is instructed to use retrieved context, not its parametric knowledge
+- **Skeleton loading UI** — Sources and answers show skeleton placeholders while loading
+- **Collapsible sidebar** — Animated side nav with expand/collapse (66px → 155px)
+- **Cross-platform** — Single Flutter codebase runs on iOS, Android, macOS, Windows, Linux, and Web
+- **Clickable sources** — Source cards open the original URL via the system browser
 
 ---
 
 ## Quick Start
 
-Clone the repo and follow the backend and frontend steps below.
+### Prerequisites
+
+- Flutter SDK ≥ 3.24.0
+- Python 3.9+
+- A [Tavily API key](https://tavily.com/)
+- A [Google AI Studio API key](https://aistudio.google.com/) (Gemini)
+
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/shivansh00011/DeepNote.git
 cd DeepNote
 ```
 
-### Backend (FastAPI)
+### 2. Backend Setup
 
-1. Create and activate a Python virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate   # Windows: venv\Scripts\activate
-   ```
-
-2. Install dependencies:
-   ```bash
-   pip install -r backend/requirements.txt
-   ```
-
-3. Copy and edit env file:
-   ```bash
-   cp backend/.env.example backend/.env
-   # edit backend/.env to include your API keys and settings
-   ```
-
-4. Run the server:
-   ```bash
-   cd backend
-   uvicorn main:app --reload
-   # default: http://localhost:8000
-   ```
-
-### Frontend (Flutter)
-
-1. Open the Flutter app folder:
-   ```bash
-   cd flutter_app
-   ```
-
-2. Install dependencies:
-   ```bash
-   flutter pub get
-   ```
-
-3. Run the app:
-   ```bash
-   flutter run
-   ```
-
----
-
-## Environment Variables (example)
-
-Place these in `backend/.env` (names are examples—match the code):
-
-- OPENAI_API_KEY=...
-- VECTOR_STORE_URL=...
-- REDIS_URL=redis://localhost:6379
-- SCRAPER_USER_AGENT="DeepNoteBot/1.0"
-- DATABASE_URL=postgresql://user:pass@localhost:5432/deepnote
-
----
-
-## API
-
-Example: submit a query
-
-POST /api/query
-Content-Type: application/json
-
-Request body:
-```json
-{
-  "query": "What are the latest announcements from OpenAI?",
-  "max_sources": 5
-}
-```
-
-Example cURL:
 ```bash
-curl -X POST http://localhost:8000/api/query \
-  -H "Content-Type: application/json" \
-  -d '{"query":"What are the latest announcements from OpenAI?","max_sources":5}'
+cd server
+
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install fastapi uvicorn[standard] tavily-python trafilatura \
+            sentence-transformers numpy google-generativeai \
+            python-dotenv pydantic-settings
+
+# Configure environment variables
+# Edit server/.env with your actual keys:
+# TAVILY_API_KEY=tvly-...
+# GEMINI_API_KEY=AIza...
+
+# Start the server
+uvicorn main:app --reload
+# Server runs at http://localhost:8000
+# WebSocket at ws://localhost:8000/ws/chat
 ```
 
-Typical response:
+### 3. Frontend Setup
+
+```bash
+cd ..   # Back to project root
+
+# Install Flutter dependencies
+flutter pub get
+
+# Run the app (choose your target platform)
+flutter run                     # Auto-detects connected device
+flutter run -d chrome           # Web
+flutter run -d macos            # macOS desktop
+flutter run -d windows          # Windows desktop
+```
+
+---
+
+## Environment Variables
+
+Create `server/.env` with the following:
+
+```env
+TAVILY_API_KEY=tvly-your-key-here
+GEMINI_API_KEY=AIzaSy-your-key-here
+```
+
+> ⚠️ **Never commit your `.env` file.** Add it to `.gitignore`.
+
+---
+
+## API Reference
+
+### WebSocket: `ws://localhost:8000/ws/chat`
+
+**Send:**
+```json
+{ "query": "Your question here" }
+```
+
+**Receive (message 1 — sources):**
 ```json
 {
-  "answer": "Summary produced by the LLM...",
-  "sources": [
-    {"title":"...", "url":"...", "snippet":"..."},
-    {"title":"...", "url":"...", "snippet":"..."}
-  ],
-  "confidence": 0.87
+  "type": "search_result",
+  "data": [
+    {
+      "title": "Source Title",
+      "url": "https://example.com",
+      "content": "Full extracted article text...",
+      "relevance_score": 0.87
+    }
+  ]
 }
 ```
 
-Adjust endpoint routes and payloads to match the implementation in `backend/routes/`.
+**Receive (messages 2…N — streamed answer):**
+```json
+{ "type": "content", "data": "partial answer chunk..." }
+```
+
+### REST: `POST /chat`
+
+```bash
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is quantum computing?"}'
+```
 
 ---
 
-## Project Layout (recommended)
+## How the Semantic Ranking Works
 
-A representative layout — adjust to the repo's exact structure:
+The `SortService` uses `sentence-transformers` to rank search results by relevance:
 
-- backend/
-  - main.py
-  - requirements.txt
-  - routes/
-  - services/
-    - query_processor.py
-    - web_scraper.py
-    - semantic_search.py
-    - llm_handler.py
-  - config/
-  - tests/
-- flutter_app/
-  - lib/
-    - main.dart
-    - screens/
-    - widgets/
-    - services/
-  - pubspec.yaml
-- docs/
-- tests/
-- .gitignore
-- README.md
-- LICENSE
+1. Encode the user query into a vector embedding
+2. Encode each result's full content into a vector embedding
+3. Compute cosine similarity between query and each result
+4. Filter out results with similarity ≤ 0.3
+5. Return results sorted by relevance score (descending)
+
+This ensures the LLM receives the most topically relevant content, reducing noise and hallucination risk.
 
 ---
 
-## Development & Testing
+## Flutter Dependencies
 
-- Backend tests (pytest):
-  ```bash
-  cd backend
-  pytest
-  ```
+| Package | Purpose |
+|---|---|
+| `google_fonts` | Inter & IBM Plex Mono typefaces |
+| `web_socket_client` | WebSocket connection to FastAPI backend |
+| `flutter_markdown` | Renders LLM Markdown output |
+| `skeletonizer` | Skeleton loading animations |
+| `url_launcher` | Opens source URLs in system browser |
+| `cupertino_icons` | iOS-style icons |
 
-- Frontend tests:
-  ```bash
-  cd flutter_app
-  flutter test
-  ```
+---
 
-- Run linting/formatters:
-  - Python: `black`, `flake8`  
-  - Dart: `dart format`, `flutter analyze`
+## Roadmap
+
+- [ ] Chat history persistence (local storage / database)
+- [ ] Multi-turn conversation support
+- [ ] User authentication and saved sessions
+- [ ] Pluggable LLM backends (OpenAI, Anthropic, local models)
+- [ ] Voice input support
+- [ ] Source citation inline in the answer text
+- [ ] Follow-up question suggestions
+- [ ] Redis caching for repeated queries
+- [ ] Rate limiting and API quota controls
+- [ ] Docker Compose setup for one-command deployment
 
 ---
 
 ## Contributing
 
-Contributions are welcome. Suggested workflow:
+Contributions are welcome!
 
 1. Fork the repository
-2. Create a branch: `git checkout -b feat/your-feature`
-3. Add tests and documentation for your changes
-4. Commit and push: `git push origin feat/your-feature`
-5. Open a Pull Request describing your changes
+2. Create a feature branch: `git checkout -b feat/your-feature`
+3. Make your changes with tests where applicable
+4. Commit with a clear message: `git commit -m "feat: add follow-up suggestions"`
+5. Push and open a Pull Request
 
-Please follow code style guidelines and keep commits focused and descriptive.
+Please follow existing code style — `black`/`flake8` for Python, `dart format`/`flutter analyze` for Dart.
 
----
-
-## Roadmap (examples)
-
-- Add authentication & user profiles  
-- Pluggable model backends and model selection UI  
-- Persistent vector store (Redis/Weaviate) support  
-- Rate-limiting and API quota controls  
-- Voice and multi-language input support
-
----
